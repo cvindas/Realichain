@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
-import { ethers } from 'ethers';
-import { CONTRACT_ADDRESS, CONTRACT_ABI } from './config';
+import { useState, useEffect, useCallback } from 'react';
+import { ethers, BrowserProvider, Contract } from 'ethers';
+import contractConfig from './contract-address.json';
+import contractArtifact from './RealEstate.json';
 import Header from './components/Header';
 import Filters from './components/Filters';
 import PropertyCard from './components/PropertyCard';
@@ -8,6 +9,8 @@ import DaoPanel from './components/DaoPanel';
 import PropertyDetail from './components/PropertyDetail';
 import TransactionStatus from './components/TransactionStatus';
 import Portfolio from './components/Portfolio';
+
+
 
 // Simulación de metadatos que se obtendrían de IPFS
 const propertyMetadata = {
@@ -38,7 +41,6 @@ const propertyMetadata = {
 };
 
 function App() {
-  const [provider, setProvider] = useState(null);
   const [contract, setContract] = useState(null);
   const [walletAddress, setWalletAddress] = useState(null);
   const [allProperties, setAllProperties] = useState([]); // Almacenará todas las propiedades
@@ -50,138 +52,147 @@ function App() {
   const [portfolio, setPortfolio] = useState([]);
 
   useEffect(() => {
-    if (walletAddress) {
-      loadBlockchainData();
-    }
-  }, [walletAddress]);
+    if (!window.ethereum) return;
 
-  useEffect(() => {
-    if (window.ethereum) {
-      // Detecta si el usuario cambia de cuenta en MetaMask
-      window.ethereum.on('accountsChanged', (accounts) => {
-        if (accounts.length > 0) {
-          setWalletAddress(accounts[0]);
-        } else {
-          setWalletAddress(null);
-          setFilteredProperties([]); // Limpiar propiedades si se desconecta
-          setAllProperties([]);
-        }
-      });
+    const handleAccountsChanged = (accounts) => {
+      if (accounts.length === 0) {
+        setWalletAddress(null);
 
-      // Detecta si el usuario cambia de red
-      window.ethereum.on('chainChanged', (_chainId) => {
-        // Simplemente recarga la página para forzar una reconexión y chequeo de red
-        window.location.reload();
-      });
-    }
-
-    // Cleanup listeners al desmontar el componente
-    return () => {
-      if (window.ethereum) {
-        window.ethereum.removeAllListeners('accountsChanged');
-        window.ethereum.removeAllListeners('chainChanged');
+        setContract(null);
+        setAllProperties([]);
+        setFilteredProperties([]);
+      } else {
+        setWalletAddress(accounts[0]);
       }
     };
-  }, []);
 
-  const connectWallet = async () => {
-    if (window.ethereum) {
+    const handleChainChanged = () => {
+      window.location.reload();
+    };
+
+    window.ethereum.on('accountsChanged', handleAccountsChanged);
+    window.ethereum.on('chainChanged', handleChainChanged);
+
+    const checkAndSwitchNetwork = async () => {
+      const HARDHAT_CHAIN_ID = '0x7a69'; // 31337 en hexadecimal
       try {
-        // Primero, nos aseguramos de que el usuario esté en la red correcta
-        await checkAndSwitchNetwork();
-
-        // Luego, solicitamos la cuenta
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        setWalletAddress(accounts[0]);
-      } catch (error) {
-        alert("Hubo un error al conectar con MetaMask. Por favor, asegúrate de haber aceptado la solicitud.");
-        console.error("Error connecting to MetaMask:", error);
-      }
-    } else {
-      alert('MetaMask no está instalado. Por favor, instálalo para usar esta DApp.');
-    }
-  };
-
-  const checkAndSwitchNetwork = async () => {
-    const HARDHAT_CHAIN_ID = '0x7a69'; // 31337 en hexadecimal
-    if (window.ethereum) {
-      const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
-
-      if (currentChainId !== HARDHAT_CHAIN_ID) {
-        try {
+        const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
+        if (currentChainId !== HARDHAT_CHAIN_ID) {
           await window.ethereum.request({
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: HARDHAT_CHAIN_ID }],
           });
-        } catch (switchError) {
-          // Este error (4902) significa que la red no ha sido agregada a MetaMask
-          if (switchError.code === 4902) {
-            try {
-              await window.ethereum.request({
-                method: 'wallet_addEthereumChain',
-                params: [
-                  {
-                    chainId: HARDHAT_CHAIN_ID,
-                    chainName: 'Hardhat Localhost',
-                    rpcUrls: ['http://127.0.0.1:8545'],
-                    nativeCurrency: {
-                      name: 'GoerliETH',
-                      symbol: 'gETH',
-                      decimals: 18,
-                    },
-                  },
-                ],
-              });
-            } catch (addError) {
-              console.error('Failed to add the Hardhat network:', addError);
-              throw addError;
-            }
-          } else {
-            throw switchError;
+        }
+      } catch (switchError) {
+        if (switchError.code === 4902) {
+          try {
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [
+                {
+                  chainId: HARDHAT_CHAIN_ID,
+                  chainName: 'Hardhat Localhost',
+                  rpcUrls: ['http://127.0.0.1:8545'],
+                  nativeCurrency: { name: 'GoerliETH', symbol: 'gETH', decimals: 18 },
+                },
+              ],
+            });
+          } catch (addError) {
+            console.error('Failed to add the Hardhat network:', addError);
           }
         }
       }
-    }
-  };
+    };
 
-  const loadBlockchainData = async () => {
-    setLoading(true);
-    if (window.ethereum) {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
-      setProvider(provider);
-      setContract(contract);
-
+    const connectOnLoad = async () => {
+      if (window.connectionAttempted) return;
+      window.connectionAttempted = true;
       try {
-        console.log('Fetching properties from blockchain...');
-        const totalSupply = await contract.totalSupply();
-        const properties = [];
+        await checkAndSwitchNetwork();
+        const newProvider = new BrowserProvider(window.ethereum);
 
-        for (let i = 0; i < totalSupply; i++) {
-          const uri = await contract.tokenURI(i);
-          const metadata = propertyMetadata[uri]; // Simulación de fetch a IPFS
-          if (metadata) {
-            properties.push({
-              tokenId: i,
-              ipfsHash: uri,
-              ...metadata
+        // Primero, intentar obtener cuentas existentes sin abrir MetaMask
+        let accounts = await newProvider.send('eth_accounts', []);
+
+        // Si no hay cuentas conectadas, solicitar conexión
+        if (accounts.length === 0) {
+          accounts = await newProvider.send('eth_requestAccounts', []);
+        }
+
+        if (accounts.length > 0) {
+          const signer = await newProvider.getSigner();
+          const address = await signer.getAddress();
+          const newContract = new Contract(contractConfig.address, contractArtifact.abi, signer);
+          setWalletAddress(address);
+          setContract(newContract);
+        }
+      } catch (error) {
+        if (error.code !== -32002) {
+          console.error("Error connecting to MetaMask on load:", error);
+        }
+      }
+    };
+
+    connectOnLoad();
+
+    return () => {
+      window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+      window.ethereum.removeListener('chainChanged', handleChainChanged);
+    };
+  }, []);
+
+  const loadBlockchainData = useCallback(async () => {
+    if (!contract || !walletAddress) return;
+    setLoading(true);
+    try {
+      console.log('Fetching properties and portfolio from blockchain...');
+      const totalSupply = await contract.totalSupply();
+      const properties = [];
+      const userPortfolio = [];
+
+      const totalSupplyNumber = Number(totalSupply);
+      for (let i = 0; i < totalSupplyNumber; i++) {
+        const tokenId = await contract.tokenByIndex(i);
+        const uri = await contract.tokenURI(tokenId);
+        const metadata = propertyMetadata[uri]; // Simulación de fetch a IPFS
+        
+        if (metadata) {
+          const propertyData = {
+            tokenId: Number(tokenId),
+            ipfsHash: uri,
+            ...metadata
+          };
+          properties.push(propertyData);
+
+          // Comprobar si el usuario es dueño de fracciones de esta propiedad
+          const userFractionBalance = await contract.getFractionsOwned(tokenId, walletAddress);
+          if (userFractionBalance > 0) {
+            userPortfolio.push({
+              ...propertyData,
+              ownership: { type: 'fractional', amount: Number(userFractionBalance) }
             });
           }
         }
-        
-        console.log(`Found ${properties.length} properties.`);
-        setAllProperties(properties);
-        setFilteredProperties(properties);
-        setLoading(false);
-
-      } catch (error) {
-        console.error("Error loading properties from blockchain:", error);
-        setLoading(false); // También detener la carga en caso de error
       }
-    } else {
-      console.log('Please install MetaMask!');
+      
+      console.log(`Found ${properties.length} total properties.`);
+      console.log(`Found ${userPortfolio.length} properties in portfolio.`);
+      setAllProperties(properties);
+      setFilteredProperties(properties);
+      setPortfolio(userPortfolio); // Establecer el estado del portafolio
+
+    } catch (error) {
+      console.error("Error loading data from blockchain:", error);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [contract, walletAddress]);
+
+  useEffect(() => {
+    if (contract && walletAddress) {
+      loadBlockchainData();
+    }
+  }, [contract, walletAddress, loadBlockchainData]);
 
   const handleSearch = (filters) => {
     let filtered = allProperties.filter(prop => {
@@ -210,97 +221,119 @@ function App() {
     setSelectedProperty(null);
   };
 
-  const handleOfferSubmitted = (offerDetails) => {
-    setActiveTransaction({
-      ...offerDetails,
-      status: 'Oferta Realizada' // Initial status
-    });
-    setSelectedProperty(null); // Hide the detail view
-  };
+  const handleOfferSubmitted = async (offerDetails) => {
+    if (!contract) { return alert('Por favor, conecta tu wallet primero.'); }
 
-  const handleUpdateTransactionStatus = (newStatus) => {
-    setActiveTransaction(prev => {
-      const updatedTransaction = { ...prev, status: newStatus };
-      
-      if (newStatus === 'Propiedad Transferida') {
-        // Add the property with full ownership to the portfolio
-        setPortfolio(currentPortfolio => [
-          ...currentPortfolio,
-          { ...updatedTransaction.property, ownership: { type: 'full' } }
-        ]);
-        // After a delay, clear the transaction and switch to portfolio
+    try {
+        const { property, offerAmount } = offerDetails;
+        if (!offerAmount || parseFloat(offerAmount) <= 0) {
+            return alert('Por favor, ingresa un monto de oferta válido.');
+        }
+        
+        // Placeholder conversion: 1 USD = 0.0003 ETH. Adjust as needed.
+        const offerInEth = parseFloat(offerAmount) * 0.0003;
+        const offerInWei = ethers.parseEther(offerInEth.toFixed(18).toString());
+
+        setActiveTransaction({ property, status: 'Enviando oferta a MetaMask...' });
+
+        const tx = await contract.makeOffer(property.tokenId, { value: offerInWei });
+
+        setActiveTransaction(prev => ({ ...prev, status: 'Procesando transacción...' }));
+        await tx.wait();
+
+        setActiveTransaction(prev => ({ ...prev, status: '¡Oferta realizada con éxito!' }));
+
         setTimeout(() => {
-          setActiveTransaction(null);
-          setCurrentView('portfolio');
-        }, 2000);
-      }
-      
-      return updatedTransaction;
-    });
-  };
+            setActiveTransaction(null);
+            setSelectedProperty(null);
+        }, 3000);
 
-  const handleInvest = (property, fractions) => {
-    const numFractions = parseInt(fractions, 10);
-    if (!numFractions || numFractions <= 0) {
-      alert('Por favor, ingresa un número válido de fracciones.');
-      return;
+    } catch (error) {
+        console.error("Error submitting offer:", error);
+        const errorMessage = error.reason || 'La transacción fue rechazada o falló.';
+        setActiveTransaction({ property: offerDetails.property, status: 'Error en la transacción', message: errorMessage });
     }
-
-    setPortfolio(currentPortfolio => {
-      const existingInvestment = currentPortfolio.find(p => p.tokenId === property.tokenId);
-
-      if (existingInvestment) {
-        // Update existing investment
-        return currentPortfolio.map(p => 
-          p.tokenId === property.tokenId 
-            ? { ...p, ownership: { ...p.ownership, amount: p.ownership.amount + numFractions } } 
-            : p
-        );
-      } else {
-        // Add new investment
-        return [
-          ...currentPortfolio,
-          { ...property, ownership: { type: 'fractional', amount: numFractions } }
-        ];
-      }
-    });
-
-    const fractionPrice = parseInt(property.price.replace(/\$|,/g, '')) / 1000;
-    const totalCost = fractionPrice * numFractions;
-    alert(`Simulación: Inversión de $${totalCost.toFixed(2)} por ${numFractions} fracciones del Token ID: ${property.tokenId} realizada.`);
   };
 
   const navigate = (view) => {
     setCurrentView(view);
-    // Reset other states when navigating
-    setSelectedProperty(null);
     setActiveTransaction(null);
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50 font-sans">
-      <Header onConnectWallet={connectWallet} walletAddress={walletAddress} onNavigate={navigate} />
+  const handleUpdateTransactionStatus = (newStatus) => {
+    setActiveTransaction(prev => ({ ...prev, status: newStatus }));
+  };
 
-      <main className="container mx-auto p-12 flex flex-col lg:flex-row gap-12">
-        {/* Main Content */}
-        <div className="w-full lg:w-1/4">
+  const handleCloseTransaction = () => {
+    setActiveTransaction(null);
+  };
+
+  const handleInvest = async (property, fractions) => {
+    if (!contract) { return alert('Por favor, conecta tu wallet primero.'); }
+
+    const numFractions = parseInt(fractions, 10);
+    if (!numFractions || numFractions <= 0) {
+        return alert('Por favor, ingresa un número válido de fracciones.');
+    }
+
+    try {
+        const pricePerFractionInWei = await contract.fractionPriceInWei();
+        const totalCostInWei = window.BigInt(pricePerFractionInWei) * window.BigInt(numFractions);
+
+        setActiveTransaction({
+            property,
+            fractions: numFractions,
+            status: 'Enviando inversión a MetaMask...'
+        });
+
+        const tx = await contract.purchaseFractions(property.tokenId, numFractions, {
+            value: totalCostInWei
+        });
+
+        setActiveTransaction(prev => ({ ...prev, status: 'Procesando transacción...' }));
+
+        await tx.wait();
+
+        // Recargar los datos para reflejar la nueva inversión
+        await loadBlockchainData();
+
+        setActiveTransaction(prev => ({ ...prev, status: '¡Inversión realizada con éxito!' }));
+
+        setTimeout(() => {
+            setActiveTransaction(null);
+            setSelectedProperty(null);
+            setCurrentView('portfolio');
+        }, 3000);
+
+    } catch (error) {
+        console.error("Error investing:", error);
+        const errorMessage = error.reason || 'La transacción fue rechazada o falló.';
+        setActiveTransaction({ property, status: 'Error en la transacción', message: errorMessage });
+    }
+  };
+
+  return (
+    <div className="bg-gray-900 text-white min-h-screen font-sans">
+      <Header className="w-full" walletAddress={walletAddress} onNavigate={navigate} />
+
+      <main className="container mx-auto p-12 flex flex-col gap-12 max-w-7xl">
+        
+        <div className="w-full">
           <Filters onSearch={handleSearch} />
-          <DaoPanel />
         </div>
 
-        {/* Main Content */}
-        <div className="w-full lg:w-3/4">
+        <div className="w-full">
           {currentView === 'portfolio' ? (
             <Portfolio properties={portfolio} />
           ) : activeTransaction ? (
-            <TransactionStatus transaction={activeTransaction} onUpdateStatus={handleUpdateTransactionStatus} />
+            <TransactionStatus transaction={activeTransaction} onUpdateStatus={handleUpdateTransactionStatus} onClose={handleCloseTransaction} />
           ) : selectedProperty ? (
             <PropertyDetail property={selectedProperty} onBack={handleBackToList} onOfferSubmit={handleOfferSubmitted} onInvest={handleInvest} />
           ) : loading ? (
-            <p className="text-center text-gray-500">Cargando propiedades desde la blockchain...</p>
+            <p className="text-center text-xl">Cargando propiedades desde la blockchain...</p>
           ) : (
             <>
-              <h2 className="text-4xl font-bold text-gray-800 mb-6">Descubre propiedades</h2>
+              <h2 className="text-4xl font-bold mb-8">Descubre propiedades</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {filteredProperties.map(property => (
                   <PropertyCard key={property.tokenId} property={property} onSelect={handleSelectProperty} />
@@ -308,6 +341,10 @@ function App() {
               </div>
             </>
           )}
+        </div>
+
+        <div className="w-full">
+          <DaoPanel />
         </div>
       </main>
     </div>

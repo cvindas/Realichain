@@ -23,7 +23,15 @@ async function main() {
     '../../real-estate-dapp/src/RealEstate.json'
   );
 
-  fs.copyFileSync(sourceAbiPath, destinationAbiPath);
+  // Leer el artefacto, extraer el ABI y escribirlo en el destino
+  const sourceArtifact = require(sourceAbiPath);
+  const abi = sourceArtifact.abi;
+
+  // Escribir un objeto que contenga solo el ABI en el archivo de destino
+  fs.writeFileSync(
+    destinationAbiPath,
+    JSON.stringify({ abi: abi }, null, 2)
+  );
 
   console.log(`ABI synced successfully to: ${destinationAbiPath}`);
 }

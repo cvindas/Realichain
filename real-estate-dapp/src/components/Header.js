@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const Header = ({ onConnectWallet, walletAddress, onNavigate }) => {
+const Header = ({ walletAddress, onNavigate, className }) => {
   const [isCopied, setIsCopied] = useState(false);
 
   const formatAddress = (address) => {
@@ -13,8 +13,9 @@ const Header = ({ onConnectWallet, walletAddress, onNavigate }) => {
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000); // Reset after 2 seconds
   };
+
   return (
-    <header className="bg-dark-navy text-white shadow-md">
+    <header className={`bg-dark-navy text-white shadow-md ${className}`}>
       <div className="container mx-auto flex justify-between items-center p-5">
         <h1 className="text-3xl font-bold tracking-wider">DApp BIENES RAÍCES</h1>
         <nav>
@@ -44,8 +45,7 @@ const Header = ({ onConnectWallet, walletAddress, onNavigate }) => {
             </div>
           ) : (
             <button 
-              onClick={onConnectWallet} 
-              className="bg-brand-blue hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg transition-colors duration-300"
+              className="bg-brand-blue hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg transition-colors duration-300 cursor-not-allowed opacity-50"
             >
               Conectar Wallet
             </button>
@@ -56,4 +56,4 @@ const Header = ({ onConnectWallet, walletAddress, onNavigate }) => {
   );
 };
 
-export default Header;
+export default React.memo(Header);

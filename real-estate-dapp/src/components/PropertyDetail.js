@@ -9,11 +9,13 @@ const PropertyDetail = ({ property, onBack, onOfferSubmit, onInvest }) => {
   const priceAsNumber = isForSale ? parseInt(property.price.replace(/\$|,/g, '')) : 0;
   const fractionPrice = isForSale ? priceAsNumber / 1000 : 0; // Assuming 1000 fractions
 
-  const handleOfferSubmit = () => {
-    if (!offerAmount) {
-      alert('Por favor, ingresa un monto para la oferta.');
+  const handleOfferSubmit = (e) => {
+    e.preventDefault(); // Prevenir el comportamiento por defecto del formulario
+    if (!offerAmount || parseFloat(offerAmount) <= 0) {
+      alert('Por favor, ingresa un monto válido para la oferta.');
       return;
     }
+    // Llamar a la función del padre con los datos correctos
     onOfferSubmit({ property, offerAmount });
   };
 
@@ -67,7 +69,7 @@ const PropertyDetail = ({ property, onBack, onOfferSubmit, onInvest }) => {
                   type="number" 
                   value={offerAmount}
                   onChange={(e) => setOfferAmount(e.target.value)}
-                  className="p-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-brand-blue"
+                  className="p-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-brand-blue text-gray-800"
                   placeholder="Ej: 345000"
                 />
                 <button 
@@ -102,8 +104,9 @@ const PropertyDetail = ({ property, onBack, onOfferSubmit, onInvest }) => {
                   type="number"
                   value={fractions}
                   onChange={(e) => setFractions(e.target.value)}
-                  className="p-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-brand-blue"
+                  className="p-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-purple-500 text-gray-800"
                   placeholder="Nº de fracciones"
+                  min="1"
                 />
                 <button 
                   onClick={handleInvest}
