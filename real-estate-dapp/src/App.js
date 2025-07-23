@@ -8,7 +8,7 @@ import PropertyCard from './components/PropertyCard';
 import DaoPanel from './components/DaoPanel';
 import PropertyDetail from './components/PropertyDetail';
 import TransactionStatus from './components/TransactionStatus';
-import Portfolio from './components/Portfolio';
+
 
 
 
@@ -50,6 +50,8 @@ function App() {
   const [activeTransaction, setActiveTransaction] = useState(null);
   const [currentView, setCurrentView] = useState('discover'); // 'discover' or 'portfolio'
   const [portfolio, setPortfolio] = useState([]);
+  const [userOffers, setUserOffers] = useState([]);
+  const [purchaseHistory, setPurchaseHistory] = useState([]);
 
   useEffect(() => {
     if (!window.ethereum) return;
@@ -149,6 +151,7 @@ function App() {
       const totalSupply = await contract.totalSupply();
       const properties = [];
       const userPortfolio = [];
+      const userOffersData = [];
 
       const totalSupplyNumber = Number(totalSupply);
       for (let i = 0; i < totalSupplyNumber; i++) {
@@ -169,7 +172,16 @@ function App() {
           if (userFractionBalance > 0) {
             userPortfolio.push({
               ...propertyData,
-              ownership: { type: 'fractional', amount: Number(userFractionBalance) }
+              fractionsOwned: userFractionBalance.toString(),
+            });
+          }
+
+          // Comprobar si el usuario tiene la oferta más alta
+          const offer = await contract.highestOffer(tokenId);
+          if (offer.offerer.toLowerCase() === walletAddress.toLowerCase() && offer.isActive) {
+            userOffersData.push({
+              ...propertyData,
+              offerAmount: ethers.formatEther(offer.amount),
             });
           }
         }
@@ -179,7 +191,19 @@ function App() {
       console.log(`Found ${userPortfolio.length} properties in portfolio.`);
       setAllProperties(properties);
       setFilteredProperties(properties);
-      setPortfolio(userPortfolio); // Establecer el estado del portafolio
+      setPortfolio(userPortfolio);
+      setUserOffers(userOffersData); // Establecer el estado del portafolio
+
+      // Cargar historial de compras
+      const purchaseFilter = contract.filters.FractionsPurchased(null, walletAddress);
+      const purchaseEvents = await contract.queryFilter(purchaseFilter);
+      const history = purchaseEvents.map(event => ({
+        tokenId: event.args.tokenId.toString(),
+        fractions: event.args.count.toString(),
+        cost: ethers.formatEther(event.args.totalCost),
+        txHash: event.transactionHash,
+      }));
+      setPurchaseHistory(history); // Establecer el estado del portafolio
 
     } catch (error) {
       console.error("Error loading data from blockchain:", error);
@@ -292,10 +316,13 @@ function App() {
 
         setActiveTransaction(prev => ({ ...prev, status: 'Procesando transacción...' }));
 
-        await tx.wait();
+        const receipt = await tx.wait();
 
-        // Recargar los datos para reflejar la nueva inversión
-        await loadBlockchainData();
+        // Forzar la recarga de datos después de que la transacción se haya minado
+        if (receipt.status === 1) {
+            console.log('Transaction successful, reloading blockchain data...');
+            await loadBlockchainData();
+        }
 
         setActiveTransaction(prev => ({ ...prev, status: '¡Inversión realizada con éxito!' }));
 
@@ -324,7 +351,66 @@ function App() {
 
         <div className="w-full">
           {currentView === 'portfolio' ? (
-            <Portfolio properties={portfolio} />
+            <div>
+                  <h2 className="text-4xl font-bold mb-8">Mis Inversiones</h2>
+                  {portfolio.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                      {portfolio.map(property => (
+                        <PropertyCard key={`investment-${property.tokenId}`} property={property} onSelect={handleSelectProperty} />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-400">No tienes inversiones activas.</p>
+                  )}
+
+                  <h2 className="text-4xl font-bold mt-12 mb-8">Mis Ofertas</h2>
+                  {userOffers.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                      {userOffers.map(property => (
+                        <PropertyCard key={`offer-${property.tokenId}`} property={property} onSelect={handleSelectProperty} />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-400">No tienes ofertas activas.</p>
+                  )}
+
+                  <h2 className="text-4xl font-bold mt-12 mb-8">Historial de Compras</h2>
+                  {purchaseHistory.length > 0 ? (
+                    <div className="overflow-x-auto relative shadow-md sm:rounded-lg">
+                      <table className="w-full text-sm text-left text-gray-400">
+                        <thead className="text-xs text-gray-300 uppercase bg-gray-700">
+                          <tr>
+                            <th scope="col" className="py-3 px-6">ID Propiedad</th>
+                            <th scope="col" className="py-3 px-6">Fracciones Compradas</th>
+                            <th scope="col" className="py-3 px-6">Costo (ETH)</th>
+                            <th scope="col" className="py-3 px-6">Transacción</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {purchaseHistory.map((item, index) => (
+                            <tr key={index} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-600">
+                              <td className="py-4 px-6">{item.tokenId}</td>
+                              <td className="py-4 px-6">{item.fractions}</td>
+                              <td className="py-4 px-6">{item.cost}</td>
+                              <td className="py-4 px-6">
+                                <a 
+                                  href={`https://etherscan.io/tx/${item.txHash}`} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="font-medium text-blue-500 hover:underline"
+                                >
+                                  Ver en Etherscan
+                                </a>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-gray-400">No tienes compras registradas.</p>
+                  )}
+                </div>
           ) : activeTransaction ? (
             <TransactionStatus transaction={activeTransaction} onUpdateStatus={handleUpdateTransactionStatus} onClose={handleCloseTransaction} />
           ) : selectedProperty ? (
