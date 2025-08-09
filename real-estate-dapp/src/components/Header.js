@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 
 const Header = ({ walletAddress, onNavigate, className }) => {
   const [isCopied, setIsCopied] = useState(false);
@@ -39,9 +40,9 @@ const Header = ({ walletAddress, onNavigate, className }) => {
                   }
                 </button>
               </div>
-              <button onClick={() => alert('Simulación: Iniciando proceso de tokenización...')} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">
-                Tokenizar Propiedad
-              </button>
+              <Link to="/mint" className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">
+                Mint Property
+              </Link>
             </div>
           ) : (
             <button 
