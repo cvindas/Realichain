@@ -1,24 +1,36 @@
 import React from 'react';
 
 const PropertyCard = ({ property, onSelect }) => {
+  const formatPrice = (price) => {
+    if (typeof price === 'number') {
+      return price.toLocaleString('en-US');
+    }
+    if (typeof price === 'string') {
+      const num = parseInt(price.replace(/\$|,/g, ''));
+      return isNaN(num) ? price : num.toLocaleString('en-US');
+    }
+    return price;
+  };
+
   return (
-    <div className="bg-white rounded-xl shadow-lg overflow-hidden transform hover:-translate-y-2 transition-transform duration-300 flex flex-col">
-      <img className="w-full h-56 object-cover" src={property.image} alt={`${property.type} in ${property.city}`} />
-      <div className="p-6 flex-grow flex flex-col">
-        <p className="text-2xl font-bold text-gray-900">{property.price}</p>
-        <p className="text-lg text-gray-700 mt-1">{property.type}</p>
-        <p className="text-md text-gray-500 mt-1">{property.city}</p>
-        <div className="mt-4 pt-4 border-t border-gray-200">
-          <p className="text-sm text-gray-600 font-mono">Token ID: {property.tokenId}</p>
+    <div 
+      onClick={() => onSelect(property)}
+      className="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer transition-transform duration-300 hover:shadow-xl hover:-translate-y-1 group"
+    >
+      <div 
+        className="relative w-full h-48 bg-cover bg-center flex items-center justify-center p-4"
+        style={{ backgroundImage: `url(${property.image})` }}
+      >
+        <div className="absolute inset-0 bg-black bg-opacity-40 group-hover:bg-opacity-50 transition-all duration-300"></div>
+        <h3 className="relative text-white text-3xl font-bold text-center z-10">{property.name}</h3>
+      </div>
+      <div className="p-4">
+        <div className="flex justify-between items-center">
+          <p className="text-2xl font-bold text-gray-900">${formatPrice(property.price)}</p>
+          <p className="text-sm text-gray-600 bg-gray-200 px-3 py-1 rounded-full font-medium">{property.propertyType}</p>
         </div>
-        <div className="mt-auto">
-          <button 
-            onClick={() => onSelect(property)}
-            className="mt-4 w-full bg-brand-blue hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300"
-          >
-            Ver Detalles
-          </button>
-        </div>
+        <p className="text-md text-gray-700 mt-2">{property.description.substring(0, 100)}...</p>
+        <p className="text-sm text-gray-500 mt-1">{property.city}</p>
       </div>
     </div>
   );

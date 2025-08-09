@@ -1,5 +1,29 @@
 # Dependencies
 /node_modules
+/.pnp
+.pnp.js
+
+# Hardhat artifacts
+blockchain/artifacts
+blockchain/cache
+blockchain/scripts/contract-address.json
+
+# Frontend artifacts
+real-estate-dapp/src/contracts
+
+# Test/temp data
+real-estate-dapp/public/metadata/
+real-estate-dapp/src/metadata/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Misc
+.DS_Store
+*.pem
+/node_modules
 /real-estate-dapp/node_modules
 /blockchain/node_modules
 

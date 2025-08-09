@@ -15,12 +15,13 @@ async function main() {
   console.log(`Minteando NFTs al contrato en ${contractAddress}`);
   console.log(`Usando la cuenta: ${signer.address}`);
 
-  // URIs de metadatos (simulando hashes de IPFS)
+  // URIs de metadatos apuntando al servidor de desarrollo local
+  const BASE_URL = "http://localhost:3000/metadata/";
   const uris = [
-    'Qm...a1b2', // Casa de Montaña
-    'Qm...c3d4', // Villa de Lujo
-    'Qm...e5f6', // Apartamento
-    'Qm...g7h8'  // Renta Vacacional
+    `${BASE_URL}1.json`,
+    `${BASE_URL}2.json`,
+    `${BASE_URL}3.json`,
+    `${BASE_URL}4.json`
   ];
 
   // Mintear un NFT para cada URI
