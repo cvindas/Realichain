@@ -1,7 +1,8 @@
 import React from 'react';
+
 import PropertyCard from './PropertyCard';
 
-const PropertyList = ({ properties, onSelectProperty, onBuyFractions }) => {
+const PropertyList = ({ properties, onBuyFractions }) => {
   if (!properties || properties.length === 0) {
     return <p className="text-center text-gray-500">No hay propiedades disponibles en este momento.</p>;
   }
@@ -9,12 +10,10 @@ const PropertyList = ({ properties, onSelectProperty, onBuyFractions }) => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
       {properties.map(property => (
-        <PropertyCard 
-          key={property.tokenId}
-          property={property}
-          onSelect={() => onSelectProperty(property)}
-          onBuyFractions={onBuyFractions}
-        />
+          <PropertyCard 
+            key={property.tokenId}
+            property={property} 
+          />
       ))}
     </div>
   );

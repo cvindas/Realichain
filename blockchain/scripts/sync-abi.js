@@ -2,38 +2,41 @@ const fs = require('fs');
 const path = require('path');
 
 async function main() {
-  console.log('Syncing contract ABI...');
+  console.log('Syncing contract address and ABI...');
 
-  // Ruta al artefacto de compilación del contrato
-  const sourceAbiPath = path.join(
-    __dirname,
-    '../artifacts/contracts/RealEstate.sol/RealEstate.json'
-  );
-
-  if (!fs.existsSync(sourceAbiPath)) {
-    console.error('Error: Source ABI file not found.');
-    console.error(`Looked for file at: ${sourceAbiPath}`);
-    console.error('Please compile the contract first using \`npx hardhat compile\`.');
+  // 1. Leer la dirección del contrato desde el despliegue de Ignition
+  const addressFilePath = path.join(__dirname, '../ignition/deployments/chain-31337/deployed_addresses.json');
+  if (!fs.existsSync(addressFilePath)) {
+    console.error(`Error: Address file not found at ${addressFilePath}. Please deploy first.`);
+    process.exit(1);
+  }
+  const addressJson = require(addressFilePath);
+  const contractAddress = addressJson['RealEstateModule#RealEstate'];
+  if (!contractAddress) {
+    console.error('Error: Could not find contract address in deployment file.');
     process.exit(1);
   }
 
-  // Ruta de destino en el frontend
-  const destinationAbiPath = path.join(
-    __dirname,
-    '../../real-estate-dapp/src/RealEstate.json'
-  );
+  // 2. Leer el ABI desde el artefacto de compilación
+  const abiFilePath = path.join(__dirname, '../artifacts/contracts/RealEstate.sol/RealEstate.json');
+  if (!fs.existsSync(abiFilePath)) {
+    console.error(`Error: ABI file not found at ${abiFilePath}. Please compile first.`);
+    process.exit(1);
+  }
+  const abiJson = require(abiFilePath);
+  const contractAbi = abiJson.abi;
 
-  // Leer el artefacto, extraer el ABI y escribirlo en el destino
-  const sourceArtifact = require(sourceAbiPath);
-  const abi = sourceArtifact.abi;
+  // 3. Crear el objeto de contrato consolidado
+  const contractData = {
+    address: contractAddress,
+    abi: contractAbi,
+  };
 
-  // Escribir un objeto que contenga solo el ABI en el archivo de destino
-  fs.writeFileSync(
-    destinationAbiPath,
-    JSON.stringify({ abi: abi }, null, 2)
-  );
+  // 4. Escribir el archivo en la ubicación correcta del frontend
+  const destinationPath = path.join(__dirname, '../../real-estate-dapp/src/contracts/RealEstate.json');
+  fs.writeFileSync(destinationPath, JSON.stringify(contractData, null, 2));
 
-  console.log(`ABI synced successfully to: ${destinationAbiPath}`);
+  console.log(`Contract data synced successfully to: ${destinationPath}`);
 }
 
 main().catch((error) => {
