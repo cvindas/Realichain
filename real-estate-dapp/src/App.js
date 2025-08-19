@@ -5,6 +5,7 @@ import { Buffer } from 'buffer';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import RealEstate from './contracts/RealEstate.json';
 import DAOArtifact from './contracts/DAO.json';
+import ReputationArtifact from './contracts/Reputation.json';
 import contractAddresses from './contracts/contract-addresses.json';
 import Home from './components/Home'; // Importar Home
 import PropertyCard from './components/PropertyCard';
@@ -23,6 +24,7 @@ function App() {
   const [transactionStatus, setTransactionStatus] = useState({ status: 'idle', message: '' });
   const [pendingWithdrawals, setPendingWithdrawals] = useState('0');
   const [daoContract, setDaoContract] = useState(null);
+  const [reputationContract, setReputationContract] = useState(null);
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [isMintModalOpen, setIsMintModalOpen] = useState(false);
   const [isFractionalizeModalOpen, setIsFractionalizeModalOpen] = useState(false);
@@ -87,6 +89,13 @@ function App() {
         }
         const dao = new ethers.Contract(daoAddress, DAOArtifact.abi, signer);
         setDaoContract(dao);
+
+        const reputationAddress = contractAddresses.Reputation;
+        if (!reputationAddress) {
+          throw new Error('Dirección del contrato Reputation no encontrada. Ejecuta el script de actualización.');
+        }
+        const reputation = new ethers.Contract(reputationAddress, ReputationArtifact.abi, signer);
+        setReputationContract(reputation);
 
       } catch (error) {
         console.error("Error connecting to wallet:", error);
@@ -437,6 +446,7 @@ function App() {
                   onBack={() => setSelectedProperty(null)}
                   walletAddress={walletAddress}
                   contract={realEstateContract} 
+                  reputationContract={reputationContract}
                   onMakeOffer={handleMakeOffer}
                   onAcceptOffer={handleAcceptOffer}
                   onPurchaseFractions={handlePurchaseFractions}

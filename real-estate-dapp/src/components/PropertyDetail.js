@@ -4,6 +4,7 @@ import RentalManager from './RentalManager';
 import RentalForm from './RentalForm';
 import OfferManager from './OfferManager';
 import FractionManager from './FractionManager'; // Importar el nuevo componente
+import ReputationManager from './ReputationManager';
 import { PINATA_GATEWAY_URL } from '../pinata-config';
 
 // Helper to extract attributes safely
@@ -110,6 +111,14 @@ const PropertyDetail = ({ property: initialProperty, onBack, walletAddress, cont
             onMakeOffer={onMakeOffer}
             onAcceptOffer={onAcceptOffer}
             setTransactionStatus={setTransactionStatus}
+          />
+
+          <ReputationManager 
+            realEstateContract={contract}
+            reputationContract={property.reputationContract} // Necesitaremos pasar este contrato desde App.js
+            tokenId={property.tokenId}
+            walletAddress={walletAddress}
+            owner={property.owner}
           />
         </div>
       </div>

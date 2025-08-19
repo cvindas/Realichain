@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "./Reputation.sol";
 
 contract RealEstate is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable, ReentrancyGuard {
     uint256 private _nextTokenId;
@@ -24,6 +25,7 @@ contract RealEstate is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable, Reen
     }
     mapping(uint256 => Offer) public highestOffer;
     mapping(uint256 => address) public fractionContracts;
+    Reputation public reputationContract;
 
     // --- State for Rental ---
     struct Rental {
@@ -45,6 +47,7 @@ contract RealEstate is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable, Reen
     event OfferAccepted(uint256 indexed tokenId, address indexed owner, address indexed offerer, uint256 amount);
     event OfferWithdrawn(uint256 indexed tokenId, address indexed offerer);
     event PropertyFractionalized(uint256 indexed tokenId, address indexed fractionContract);
+    event Rated(address indexed rater, address indexed rated, uint256 indexed tokenId, uint8 rating);
 
     constructor(address initialOwner)
         ERC721("RealiChain", "REAL")
@@ -108,6 +111,10 @@ contract RealEstate is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable, Reen
         require(sent, "Failed to send Ether to the owner.");
 
         emit OfferAccepted(tokenId, msg.sender, offerer, amount);
+    }
+
+    function setReputationContract(address _reputationContractAddress) external onlyOwner {
+        reputationContract = Reputation(_reputationContractAddress);
     }
 
     function setFractionContract(uint256 tokenId, address fractionContractAddress) external {
@@ -198,6 +205,29 @@ contract RealEstate is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable, Reen
         }
 
         emit PropertyRented(tokenId, msg.sender, rental.rentedUntil);
+    }
+
+    function rateRental(uint256 tokenId, uint8 rating) public {
+        Rental storage rental = rentalInfo[tokenId];
+        address owner = ownerOf(tokenId);
+
+        require(rental.rentedUntil > 0, "Property was not rented");
+        require(block.timestamp > rental.rentedUntil, "Cannot rate before rental period ends");
+        require(msg.sender == owner || msg.sender == rental.tenant, "Only owner or tenant can rate");
+
+        address userToRate;
+        if (msg.sender == owner) {
+            userToRate = rental.tenant;
+        } else {
+            userToRate = owner;
+        }
+
+        // Create a unique ID for this specific rental transaction to prevent re-rating
+        uint256 transactionId = uint256(keccak256(abi.encodePacked(tokenId, rental.rentedUntil)));
+
+        reputationContract.addRating(userToRate, rating, transactionId);
+
+        emit Rated(msg.sender, userToRate, tokenId, rating);
     }
 
     function withdrawRent() public nonReentrant {

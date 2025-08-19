@@ -50,14 +50,27 @@ async function main() {
   const daoAddress = await dao.getAddress();
   console.log("Contrato DAO desplegado en:", daoAddress);
 
+  // Desplegar Reputation
+  const Reputation = await hre.ethers.getContractFactory("Reputation");
+  const reputation = await Reputation.deploy();
+  await reputation.waitForDeployment();
+  const reputationAddress = await reputation.getAddress();
+  console.log("Contrato Reputation desplegado en:", reputationAddress);
+
+  // Conectar RealEstate con Reputation
+  await realEstate.setReputationContract(reputationAddress);
+  console.log("Contrato Reputation conectado con RealEstate");
+
   // Leer artefactos de los contratos
   const realEstateArtifact = await hre.artifacts.readArtifact("RealEstate");
   const daoArtifact = await hre.artifacts.readArtifact("DAO");
   const fractionArtifact = await hre.artifacts.readArtifact("Fraction");
+  const reputationArtifact = await hre.artifacts.readArtifact("Reputation");
 
   // Guardar archivos para el frontend
   saveFrontendFiles("RealEstate", realEstateAddress, realEstateArtifact);
   saveFrontendFiles("DAO", daoAddress, daoArtifact);
+  saveFrontendFiles("Reputation", reputationAddress, reputationArtifact);
   // El contrato Fraction no se despliega aquí, pero necesitamos su artefacto completo en el frontend.
   // Guardamos su artefacto pero dejamos la dirección vacía.
   saveFrontendFiles("Fraction", "", fractionArtifact);
