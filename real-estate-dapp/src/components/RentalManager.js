@@ -1,28 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { formatEther } from 'ethers';
 
-const RentalManager = ({ tokenId, contract, walletAddress, owner, onListForRent, onWithdrawRent }) => {
+const RentalManager = ({ tokenId, walletAddress, owner, rentalInfo, onListForRent, onUnlistForRent, onWithdrawRent, pendingWithdrawals }) => {
   const [rentPrice, setRentPrice] = useState('');
-  const [rentalInfo, setRentalInfo] = useState(null);
-  const [pendingWithdrawals, setPendingWithdrawals] = useState('0');
-
-  useEffect(() => {
-    const fetchRentalInfo = async () => {
-      if (contract && tokenId && walletAddress) {
-        try {
-          const info = await contract.rentalInfo(tokenId);
-          const withdrawals = await contract.pendingWithdrawals(walletAddress);
-          setRentalInfo(info);
-          setPendingWithdrawals(formatEther(withdrawals));
-        } catch (error) {
-          console.error('Error fetching rental info:', error);
-        }
-      }
-    };
-    fetchRentalInfo();
-    const interval = setInterval(fetchRentalInfo, 5000); // Refresh every 5 seconds
-    return () => clearInterval(interval);
-  }, [contract, tokenId, walletAddress]);
 
   const handleListForRent = () => {
     if (!rentPrice || parseFloat(rentPrice) <= 0) {
@@ -53,6 +33,13 @@ const RentalManager = ({ tokenId, contract, walletAddress, owner, onListForRent,
           ) : (
             <p className="text-green-600 font-semibold">Available for rent.</p>
           )}
+          <button 
+            onClick={() => onUnlistForRent(tokenId)}
+            className="w-full mt-2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+            disabled={Number(rentalInfo.rentedUntil) * 1000 > Date.now()}
+          >
+            Unlist from Rent
+          </button>
         </div>
       ) : (
         <div className="space-y-2">

@@ -23,6 +23,7 @@ contract RealEstate is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable, Reen
         bool isActive;
     }
     mapping(uint256 => Offer) public highestOffer;
+    mapping(uint256 => address) public fractionContracts;
 
     // --- State for Rental ---
     struct Rental {
@@ -39,7 +40,11 @@ contract RealEstate is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable, Reen
     event FractionsPurchased(uint256 indexed tokenId, address indexed buyer, uint256 count, uint256 totalCost);
     event PropertyListedForRent(uint256 indexed tokenId, uint256 pricePerDay);
     event PropertyRented(uint256 indexed tokenId, address indexed tenant, uint256 rentedUntil);
+    event PropertyUnlistedForRent(uint256 indexed tokenId);
     event RentWithdrawn(address indexed owner, uint256 amount);
+    event OfferAccepted(uint256 indexed tokenId, address indexed owner, address indexed offerer, uint256 amount);
+    event OfferWithdrawn(uint256 indexed tokenId, address indexed offerer);
+    event PropertyFractionalized(uint256 indexed tokenId, address indexed fractionContract);
 
     constructor(address initialOwner)
         ERC721("RealiChain", "REAL")
@@ -70,7 +75,7 @@ contract RealEstate is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable, Reen
     function makeOffer(uint256 tokenId) public payable nonReentrant {
         require(tokenId < _nextTokenId, "Token does not exist.");
         require(msg.value > 0, "Offer amount must be greater than zero.");
-        require(msg.value > highestOffer[tokenId].amount, "Offer must be higher than the current highest offer.");
+        require(msg.value > highestOffer[tokenId].amount, "La oferta debe ser mayor que la oferta mas alta actual.");
 
         // Refund the previous highest bidder if they exist
         if (highestOffer[tokenId].isActive) {
@@ -80,6 +85,55 @@ contract RealEstate is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable, Reen
 
         highestOffer[tokenId] = Offer(msg.sender, msg.value, true);
         emit OfferMade(tokenId, msg.sender, msg.value);
+    }
+
+    function acceptOffer(uint256 tokenId) public nonReentrant {
+        require(ownerOf(tokenId) == msg.sender, "Only the owner can accept an offer.");
+        Offer storage offer = highestOffer[tokenId];
+        require(offer.isActive, "No active offer to accept.");
+
+        address offerer = offer.offerer;
+        uint256 amount = offer.amount;
+
+        // Mark offer as inactive before transfer to prevent re-entrancy
+        offer.isActive = false;
+        offer.offerer = address(0);
+        offer.amount = 0;
+
+        // Transfer NFT to the offerer
+        _transfer(msg.sender, offerer, tokenId);
+
+        // Send the funds to the original owner
+        (bool sent, ) = msg.sender.call{value: amount}("");
+        require(sent, "Failed to send Ether to the owner.");
+
+        emit OfferAccepted(tokenId, msg.sender, offerer, amount);
+    }
+
+    function setFractionContract(uint256 tokenId, address fractionContractAddress) external {
+        require(ownerOf(tokenId) == msg.sender, "Not the owner");
+        require(fractionContracts[tokenId] == address(0), "Already fractionalized");
+        fractionContracts[tokenId] = fractionContractAddress;
+        emit PropertyFractionalized(tokenId, fractionContractAddress);
+    }
+
+    function withdrawOffer(uint256 tokenId) public nonReentrant {
+        Offer storage offer = highestOffer[tokenId];
+        require(offer.offerer == msg.sender, "Only the offerer can withdraw this offer.");
+        require(offer.isActive, "No active offer to withdraw.");
+
+        uint256 amount = offer.amount;
+
+        // Mark offer as inactive before transfer
+        offer.isActive = false;
+        offer.offerer = address(0);
+        offer.amount = 0;
+        
+        // Refund the offerer
+        (bool sent, ) = msg.sender.call{value: amount}("");
+        require(sent, "Failed to refund offerer.");
+
+        emit OfferWithdrawn(tokenId, msg.sender);
     }
 
     // --- Rental Functions ---
@@ -92,6 +146,17 @@ contract RealEstate is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable, Reen
         rentalInfo[tokenId].isListed = true;
 
         emit PropertyListedForRent(tokenId, rentPricePerDay);
+    }
+
+    function unlistPropertyForRent(uint256 tokenId) public {
+        require(ownerOf(tokenId) == msg.sender, "Only the property owner can unlist it.");
+        Rental storage rental = rentalInfo[tokenId];
+        require(rental.isListed, "Property is not listed for rent.");
+        require(block.timestamp >= rental.rentedUntil, "Cannot unlist while property is rented.");
+
+        rental.isListed = false;
+
+        emit PropertyUnlistedForRent(tokenId);
     }
 
     function rentProperty(uint256 tokenId, uint256 durationInDays) public payable nonReentrant {
@@ -109,10 +174,9 @@ contract RealEstate is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable, Reen
         rental.rentedUntil = block.timestamp + (durationInDays * 1 days);
 
         // Distribute rent to fractional owners
-        uint256 totalFractions = TOTAL_FRACTIONS_PER_PROPERTY;
         // This is a simplified distribution. In a real-world scenario with many owners,
         // an iterable mapping or a more advanced structure would be needed to avoid high gas fees.
-        // For this example, we assume we can't iterate, so we use a pull pattern.
+        // For this example, we can't iterate, so we use a pull pattern.
         // The logic below is conceptual and needs a list of owners to work directly.
         // A better approach is to let owners withdraw their share.
 
@@ -122,8 +186,16 @@ contract RealEstate is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable, Reen
         // This is a complex problem. For now, we will just hold the funds and add a withdraw function.
         // A full implementation requires tracking all owners.
         // Let's credit the owner of the NFT for simplicity for now.
-        address propertyOwner = ownerOf(tokenId);
-        pendingWithdrawals[propertyOwner] += msg.value;
+        address fractionContractAddress = fractionContracts[tokenId];
+        if (fractionContractAddress != address(0)) {
+            // La propiedad esta fraccionada, enviar fondos al contrato de fraccion.
+            (bool sent, ) = fractionContractAddress.call{value: msg.value}("");
+            require(sent, "Failed to forward rent to fraction contract");
+        } else {
+            // La propiedad no esta fraccionada, acreditar al dueno.
+            address propertyOwner = ownerOf(tokenId);
+            pendingWithdrawals[propertyOwner] += msg.value;
+        }
 
         emit PropertyRented(tokenId, msg.sender, rental.rentedUntil);
     }
@@ -143,6 +215,10 @@ contract RealEstate is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable, Reen
     // --- View Functions ---
     function getFractionsOwned(uint256 tokenId, address owner) public view returns (uint256) {
         return fractionalOwnership[tokenId][owner];
+    }
+
+    function getFractionsSold(uint256 tokenId) public view returns (uint256) {
+        return fractionsSold[tokenId];
     }
 
     // The following functions are overrides required by Solidity.

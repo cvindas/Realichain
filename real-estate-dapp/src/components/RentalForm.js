@@ -26,7 +26,7 @@ const RentalForm = ({ tokenId, contract, walletAddress, owner, onRent }) => {
       alert('Please enter a valid duration in days.');
       return;
     }
-    onRent(tokenId, duration, rentalInfo.rentPricePerDay);
+    onRent(tokenId, duration);
   };
 
   if (!walletAddress || !rentalInfo || !rentalInfo.isListed || (rentalInfo.rentedUntil && Number(rentalInfo.rentedUntil) * 1000 > Date.now()) || (owner && walletAddress.toLowerCase() === owner.toLowerCase())) {

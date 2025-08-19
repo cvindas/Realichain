@@ -11,7 +11,7 @@ async function main() {
     process.exit(1);
   }
   const addressJson = require(addressFilePath);
-  const contractAddress = addressJson['RealEstateModule#RealEstate'];
+  const contractAddress = addressJson['DeploymentModule#RealEstate']; // Corregido aquí
   if (!contractAddress) {
     console.error('Error: Could not find contract address in deployment file.');
     process.exit(1);
